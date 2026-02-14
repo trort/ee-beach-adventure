@@ -76,7 +76,7 @@ const GROUND_Y_RATIO = 0.82; // Ground line at 82% of canvas height
 let dinoAnimTimer = 0;
 
 // Debug / Dev Mode
-const DEV_MODE = true;
+const DEV_MODE = false;
 let showDebug = true;
 let debugInfo = {};
 

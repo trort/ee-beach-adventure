@@ -86,10 +86,13 @@ To ensure the game works for a child at varying distances from the camera, all t
 * **Victory Screen:** Sandcastle with confetti at timer end.
 * **Audio:** Web Audio API placeholder tones (dodge chime, hit buzz, victory fanfare).
 
-### Milestone 5: Deployment Preparation
+### Milestone 5: Deployment Preparation ✅
 
-* Clean up code for production.
-* Ensure the project is ready for GitHub Pages (relative paths, etc.).
+* Set `DEV_MODE = false` for production (debug panel hidden by default).
+* Added SEO meta tags, Open Graph, and favicon.
+* Polished CSS: dark background, glassmorphic loading overlay with pulse animation.
+* Removed cache-busting `?v=` params for clean GitHub Pages deployment.
+* All paths are relative and static — no server-side dependencies.
 
 ---
 

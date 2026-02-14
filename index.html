@@ -5,27 +5,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Beach Run Adventure</title>
+    <meta name="description"
+        content="A fun motion-controlled beach running game for kids! Jump, duck, and squat to dodge obstacles using your webcam.">
+    <meta name="theme-color" content="#87CEEB">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Beach Run Adventure">
+    <meta property="og:description"
+        content="Motion-controlled beach running game for kids using webcam pose detection.">
+    <meta property="og:type" content="website">
+
+    <!-- Favicon -->
+    <link rel="icon" href="assets/favicon.png" type="image/png">
+
+    <!-- Styles -->
     <link rel="stylesheet" href="style.css">
 
     <!-- p5.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-
-    <style>
-        /* Simple loading overlay */
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-family: sans-serif;
-            font-size: 24px;
-            color: #333;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 10;
-        }
-    </style>
 </head>
 
 <body>
@@ -33,7 +30,7 @@
     <main id="game-container"></main>
 
     <!-- Game Logic -->
-    <script type="module" src="sketch.js?v=40"></script>
+    <script type="module" src="sketch.js"></script>
 </body>
 
 </html>

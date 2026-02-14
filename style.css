@@ -1,19 +1,53 @@
-body {
+/* ============================================================
+   Beach Run Adventure — Styles
+   ============================================================ */
+
+/* Reset & Layout */
+* {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
+}
+
+body {
     overflow: hidden;
-    background-color: #87CEEB; /* Sky Blue */
+    background-color: #1a1a2e;
     display: flex;
-    justify_content: center;
+    justify-content: center;
     align-items: center;
     height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 #game-container {
     position: relative;
-    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
 }
 
 canvas {
     display: block;
+}
+
+/* Loading Overlay */
+#loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 22px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.75);
+    padding: 24px 36px;
+    border-radius: 12px;
+    z-index: 10;
+    text-align: center;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
