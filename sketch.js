@@ -16,8 +16,8 @@ let isModelLoaded = false;
 // Assets
 // Assets
 let bgImage;
-let imgDinoRun, imgDinoJump, imgDinoDuck, imgDinoSquat;
-let imgShell, imgSeagull, imgRocket;
+let spriteDinoRun, spriteDinoJump, spriteDinoDuck, spriteDinoSquat;
+let spriteSeagull, spriteRocket, imgShell;
 let imgCastle;
 
 // Game State
@@ -131,13 +131,18 @@ const LEVEL_SEQUENCE = [
 // ======================== Preload ========================
 window.preload = function () {
     bgImage = loadImage("assets/beach_bg.png");
-    imgDinoRun = loadImage("assets/dino_run.png");
-    imgDinoJump = loadImage("assets/dino_jump.png");
-    imgDinoDuck = loadImage("assets/dino_duck.png");
-    imgDinoSquat = loadImage("assets/dino_squat.png");
+    
+    // Load Sprite Sheets
+    spriteDinoRun = loadImage("assets/dino_run_strip.png");
+    spriteDinoJump = loadImage("assets/dino_jump_strip.png");
+    spriteDinoDuck = loadImage("assets/dino_duck_strip.png");
+    spriteDinoSquat = loadImage("assets/dino_squat_strip.png");
+    
+    // Obstacles
+    spriteSeagull = loadImage("assets/obstacle_seagull_strip.png");
+    spriteRocket = loadImage("assets/obstacle_rocket_strip.png");
     imgShell = loadImage("assets/obstacle_shell.png");
-    imgSeagull = loadImage("assets/obstacle_seagull.png");
-    imgRocket = loadImage("assets/obstacle_rocket.png");
+    
     imgCastle = loadImage("assets/goal_castle.png");
 };
 
@@ -384,40 +389,63 @@ function drawDevOverlay() {
 }
 
 // ======================== Dinosaur Character ========================
+function drawSprite(sheet, x, y, w, h, frames, speed, flip = false) {
+    if (!sheet) return;
+    const frameIndex = Math.floor(frameCount / speed) % frames;
+    const fw = sheet.width / frames;
+    const fh = sheet.height;
+    
+    push();
+    translate(x + w/2, y + h/2);
+    if (flip) scale(-1, 1);
+    imageMode(CENTER);
+    
+    image(sheet, 0, 0, w, h, frameIndex * fw, 0, fw, fh);
+    
+    pop();
+}
+
 function drawDino() {
     const groundY = height * GROUND_Y_RATIO;
-    const dinoSize = height * 0.35; // 35% of screen height
+    const dinoSize = height * 0.35; 
     const dinoX = width * 0.2;
 
-    push();
     dinoAnimTimer++;
 
-    let img = imgDinoRun;
+    let sheet = spriteDinoRun;
+    let frames = 4; 
+    let speed = 5;  
+    
     let y = groundY - dinoSize * 0.9; 
     let w = dinoSize; 
     let h = dinoSize;
 
     if (movementState === "JUMP") {
-        img = imgDinoJump;
+        sheet = spriteDinoJump;
+        frames = 4; 
+        speed = 8;
         y = groundY - dinoSize * 1.5; 
     } else if (movementState === "DUCK") {
-        img = imgDinoDuck;
+        sheet = spriteDinoDuck;
+        frames = 4;
+        speed = 6;
         y = groundY - dinoSize * 0.75; 
         w = dinoSize * 1.2; 
         h = dinoSize * 0.8;
     } else if (movementState === "SQUAT") {
-        img = imgDinoSquat;
+        sheet = spriteDinoSquat;
+        frames = 4;
+        speed = 4; 
         y = groundY - dinoSize * 0.6;
         w = dinoSize * 0.8;
         h = dinoSize * 0.8;
     } else {
         // Run/Idle
-        y += sin(dinoAnimTimer * 0.2) * (dinoSize * 0.05);
+        speed = 6;
+        y += Math.sin(dinoAnimTimer * 0.2) * (dinoSize * 0.02);
     }
 
-    imageMode(CENTER);
-    image(img, dinoX + w/2, y + h/2, w, h);
-    pop();
+    drawSprite(sheet, dinoX, y, w, h, frames, speed);
 }
 
 // ======================== Webcam Mirror ========================
@@ -832,30 +860,44 @@ function updateObstacles() {
 }
 
 function drawObstacles() {
-    imageMode(CENTER);
     for (const o of obstacles) {
-        push();
-        translate(o.x, o.y + o.h/2);
+        let sheet, frames, speed, flip = false;
+        let drawW = o.w * 1.3, drawH = o.h * 1.3;
+        let drawY = o.y; 
         
-        let img;
-        if (o.type === 'SHELL') img = imgShell;
-        else if (o.type === 'SEAGULL') img = imgSeagull;
-        else img = imgRocket;
+        if (o.type === 'SHELL') {
+            sheet = imgShell;
+            frames = 1; speed = 1;
+            drawW = o.w * 1.2; drawH = o.h * 1.2;
+        } else if (o.type === 'SEAGULL') {
+            sheet = spriteSeagull;
+            frames = 4; speed = 6;
+            drawY += Math.sin(frameCount * 0.1) * o.h * 0.1; 
+        } else {
+            sheet = spriteRocket;
+            frames = 4; speed = 4;
+        }
 
-        if (o.type === 'SEAGULL') translate(0, sin(frameCount * 0.1) * o.h * 0.2);
-        
-        image(img, 0, 0, o.w * 1.3, o.h * 1.3); 
+        if (frames > 1) {
+            drawSprite(sheet, o.x, drawY, drawW, drawH, frames, speed, flip);
+        } else {
+            push();
+            imageMode(CENTER);
+            translate(o.x + o.w/2, drawY + o.h/2);
+            if(sheet) image(sheet, 0, 0, drawW, drawH);
+            pop();
+        }
 
         if (o.dodged) {
+            push();
             noStroke();
             fill(0, 255, 0, 200);
             textSize(32);
             textAlign(CENTER, CENTER);
-            text("✓", 0, -o.h);
+            text("✓", o.x + o.w/2, o.y - 20);
+            pop();
         }
-        pop();
     }
-    imageMode(CORNER);
 }
 
 function drawWarningArrows() {
