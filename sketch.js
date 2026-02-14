@@ -20,7 +20,9 @@ let bgImage;
 const STATE_WAITING = 0;
 const STATE_COUNTDOWN = 1;
 const STATE_LOCKED = 2;
-let currentState = STATE_WAITING;
+const STATE_MENU = -1;
+const STATE_VICTORY = 3;
+let currentState = STATE_MENU;
 
 // Calibration Data
 let countdownStartTime = 0;
@@ -78,6 +80,50 @@ const DEV_MODE = true;
 let showDebug = true;
 let debugInfo = {};
 
+// Game Modes
+const MODE_PRACTICE = 0;
+const MODE_PLAY = 1;
+let gameMode = MODE_PRACTICE;
+let menuButtons = [];
+
+// Level & Timer
+const LEVEL_DURATION = 60;
+let levelTimer = 0;
+let levelStartTime = 0;
+let obstacles = [];
+let nextObstacleIndex = 0;
+let score = 0;
+let totalObstacles = 0;
+
+// Stunned
+let isStunned = false;
+let stunnedTimer = 0;
+const STUNNED_DURATION = 45;
+
+// Audio
+let audioCtx = null;
+
+// Level Obstacle Sequence (time in seconds)
+const LEVEL_SEQUENCE = [
+    { t: 4, type: 'SHELL' },
+    { t: 7, type: 'SEAGULL' },
+    { t: 11, type: 'SHELL' },
+    { t: 14, type: 'SHELL' },
+    { t: 18, type: 'SEAGULL' },
+    { t: 22, type: 'ROCKET' },
+    { t: 26, type: 'SHELL' },
+    { t: 29, type: 'SEAGULL' },
+    { t: 33, type: 'SHELL' },
+    { t: 36, type: 'SEAGULL' },
+    { t: 40, type: 'ROCKET' },
+    { t: 43, type: 'SHELL' },
+    { t: 46, type: 'SEAGULL' },
+    { t: 49, type: 'SHELL' },
+    { t: 52, type: 'ROCKET' },
+    { t: 55, type: 'SEAGULL' },
+    { t: 58, type: 'SHELL' },
+];
+
 // ======================== Preload ========================
 window.preload = function () {
     bgImage = loadImage("assets/beach_bg.png");
@@ -134,11 +180,19 @@ window.keyPressed = function () {
     if ((key === "d" || key === "D") && DEV_MODE) {
         showDebug = !showDebug;
     }
+    if ((key === "m" || key === "M") && currentState === STATE_LOCKED) {
+        returnToMenu();
+    }
 };
 
 // ======================== Main Draw Loop ========================
 window.draw = function () {
     try {
+        // Menu & Victory screens
+        if (currentState === STATE_MENU) { drawMenu(); return; }
+        if (currentState === STATE_VICTORY) { drawVictoryScreen(); return; }
+
+        // Pose detection
         if (
             isModelLoaded && video && video.elt &&
             video.elt.readyState >= 2 &&
@@ -148,12 +202,15 @@ window.draw = function () {
             results = poseLandmarker.detectForVideo(video.elt, performance.now());
         }
 
+        // Scene
         if (currentState === STATE_LOCKED) {
             drawGameWorld();
+            updateLevel();
         } else {
             drawCalibrationScreen();
         }
 
+        // State handling
         if (isModelLoaded) {
             if (results && results.landmarks && results.landmarks.length > 0) {
                 const landmarks = results.landmarks[0];
@@ -170,7 +227,16 @@ window.draw = function () {
             drawLoadingOverlay();
         }
 
+        // UI layers
         drawUI();
+        drawGameHUD();
+        drawPracticeHUD();
+
+        if (currentState === STATE_LOCKED) {
+            drawObstacles();
+            drawWarningArrows();
+            drawStunnedEffect();
+        }
 
         if (currentState === STATE_LOCKED && video && video.width > 0) {
             drawWebcamMirror();
@@ -178,9 +244,7 @@ window.draw = function () {
 
         if (DEV_MODE) {
             drawDevOverlay();
-            if (showDebug) {
-                drawDebugPanel();
-            }
+            if (showDebug) drawDebugPanel();
         }
 
     } catch (err) {
@@ -726,9 +790,350 @@ function lockPlayer(landmarks) {
         ankleDiffHistory = [];
         bgX = 0;
         console.log("Player Locked! Reference U:", referenceU);
+        if (gameMode === MODE_PLAY) {
+            levelStartTime = millis();
+            nextObstacleIndex = 0;
+            obstacles = [];
+            score = 0;
+            totalObstacles = 0;
+            isStunned = false;
+            stunnedTimer = 0;
+        }
     }
 }
 
+// ======================== Start Menu ========================
+function drawMenu() {
+    background(30, 60, 90);
+
+    push();
+    textAlign(CENTER, CENTER);
+    noStroke();
+
+    // Beach gradient background
+    for (let y = 0; y < height; y++) {
+        const t = y / height;
+        const r = lerp(100, 244, t);
+        const g = lerp(180, 208, t);
+        const b = lerp(255, 63, t);
+        stroke(r, g, b);
+        line(0, y, width, y);
+    }
+    noStroke();
+
+    // Waves decoration
+    for (let i = 0; i < 3; i++) {
+        fill(65, 155, 220, 60 - i * 15);
+        beginShape();
+        for (let x = 0; x <= width; x += 20) {
+            const waveY = height * 0.55 + i * 25 + sin(x * 0.02 + frameCount * 0.03 + i) * 15;
+            vertex(x, waveY);
+        }
+        vertex(width, height);
+        vertex(0, height);
+        endShape(CLOSE);
+    }
+
+    // Sand
+    fill(244, 220, 160);
+    rect(0, height * 0.7, width, height * 0.3);
+
+    // Title shadow
+    fill(0, 0, 0, 80);
+    textSize(min(72, width * 0.06));
+    textStyle(BOLD);
+    text("Beach Run Adventure", width / 2 + 3, height * 0.18 + 3);
+
+    // Title
+    fill(255, 220, 50);
+    text("Beach Run Adventure", width / 2, height * 0.18);
+
+    // Dino emoji
+    textSize(80);
+    text("🦖", width / 2, height * 0.32);
+
+    // Subtitle
+    fill(255, 255, 255, 200);
+    textSize(20);
+    textStyle(NORMAL);
+    text("A Motion-Controlled Game for Kids", width / 2, height * 0.42);
+
+    // Buttons
+    const btnW = min(320, width * 0.35);
+    const btnH = 65;
+    const gap = 25;
+    const btnX = width / 2 - btnW / 2;
+    const btnY1 = height * 0.52;
+    const btnY2 = btnY1 + btnH + gap;
+
+    // Play button
+    const h1 = mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY1 && mouseY < btnY1 + btnH;
+    fill(h1 ? color(76, 175, 80) : color(56, 142, 60));
+    rect(btnX, btnY1, btnW, btnH, 14);
+    if (h1) { stroke(255, 255, 255, 100); strokeWeight(2); rect(btnX, btnY1, btnW, btnH, 14); noStroke(); }
+    fill(255);
+    textSize(26);
+    textStyle(BOLD);
+    text("🎮  Play Game (60s)", width / 2, btnY1 + btnH / 2);
+
+    // Practice button
+    const h2 = mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY2 && mouseY < btnY2 + btnH;
+    fill(h2 ? color(41, 182, 246) : color(25, 118, 210));
+    rect(btnX, btnY2, btnW, btnH, 14);
+    if (h2) { stroke(255, 255, 255, 100); strokeWeight(2); rect(btnX, btnY2, btnW, btnH, 14); noStroke(); }
+    fill(255);
+    textSize(26);
+    text("🏃  Practice Mode", width / 2, btnY2 + btnH / 2);
+
+    menuButtons = [
+        { x: btnX, y: btnY1, w: btnW, h: btnH, mode: MODE_PLAY },
+        { x: btnX, y: btnY2, w: btnW, h: btnH, mode: MODE_PRACTICE },
+    ];
+
+    textStyle(NORMAL);
+    pop();
+}
+
+window.mousePressed = function () {
+    if (currentState === STATE_MENU) {
+        for (const btn of menuButtons) {
+            if (mouseX > btn.x && mouseX < btn.x + btn.w &&
+                mouseY > btn.y && mouseY < btn.y + btn.h) {
+                gameMode = btn.mode;
+                currentState = STATE_WAITING;
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+        }
+    } else if (currentState === STATE_VICTORY) {
+        returnToMenu();
+    }
+};
+
+function returnToMenu() {
+    resetToWaiting();
+    currentState = STATE_MENU;
+    obstacles = [];
+    nextObstacleIndex = 0;
+    score = 0;
+    totalObstacles = 0;
+    isStunned = false;
+    stunnedTimer = 0;
+    levelTimer = 0;
+}
+
+// ======================== Obstacle System ========================
+function spawnObstacle(type) {
+    const groundY = height * GROUND_Y_RATIO;
+    const ds = height * 0.35;
+    let y, w, h, col, req;
+
+    if (type === 'SHELL') { w = ds * 0.3; h = ds * 0.25; y = groundY - h; col = [244, 164, 96]; req = 'JUMP'; }
+    else if (type === 'SEAGULL') { w = ds * 0.5; h = ds * 0.25; y = groundY - ds * 1.2; col = [255, 255, 255]; req = 'DUCK'; }
+    else { w = ds * 0.4; h = ds * 0.2; y = groundY - ds * 0.7; col = [255, 69, 0]; req = 'SQUAT'; }
+
+    obstacles.push({ type, x: width + 50, y, w, h, color: col, requiredAction: req, dodged: false, hit: false });
+    totalObstacles++;
+}
+
+function updateObstacles() {
+    const speed = BG_SCROLL_SPEED;
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const o = obstacles[i];
+        if (movementState !== "IDLE") o.x -= speed;
+        if (o.x < -100) { obstacles.splice(i, 1); continue; }
+
+        if (!o.dodged && !o.hit && !isStunned) {
+            const dX = width * 0.2, ds = height * 0.35, dW = ds * 0.6;
+            const gY = height * GROUND_Y_RATIO;
+            const overlap = (dX + dW / 2) > (o.x - o.w / 2) && (dX - dW / 2) < (o.x + o.w / 2) &&
+                gY > o.y && (gY - ds) < (o.y + o.h);
+            if (overlap) {
+                if (movementState === o.requiredAction) { o.dodged = true; score++; playSound('dodge'); }
+                else { o.hit = true; isStunned = true; stunnedTimer = STUNNED_DURATION; playSound('hit'); }
+            }
+        }
+    }
+    if (isStunned) { stunnedTimer--; if (stunnedTimer <= 0) isStunned = false; }
+}
+
+function drawObstacles() {
+    for (const o of obstacles) {
+        push(); noStroke();
+        if (o.type === 'SHELL') {
+            fill(o.color[0], o.color[1], o.color[2]);
+            ellipse(o.x, o.y + o.h * 0.3, o.w, o.h);
+            fill(255, 218, 185); ellipse(o.x, o.y + o.h * 0.4, o.w * 0.6, o.h * 0.5);
+            stroke(210, 140, 80); strokeWeight(1);
+            for (let j = -2; j <= 2; j++) line(o.x + j * o.w * 0.12, o.y, o.x + j * o.w * 0.15, o.y + o.h * 0.7);
+        } else if (o.type === 'SEAGULL') {
+            const wf = sin(frameCount * 0.15) * o.h * 0.4;
+            fill(255); ellipse(o.x, o.y + o.h / 2, o.w * 0.4, o.h * 0.5);
+            beginShape(); vertex(o.x - o.w * 0.5, o.y + o.h / 2 + wf); vertex(o.x - o.w * 0.15, o.y + o.h / 2);
+            vertex(o.x, o.y + o.h / 2 - o.h * 0.1); vertex(o.x + o.w * 0.15, o.y + o.h / 2);
+            vertex(o.x + o.w * 0.5, o.y + o.h / 2 - wf); endShape();
+            fill(0); ellipse(o.x + o.w * 0.1, o.y + o.h * 0.4, 4, 4);
+            fill(255, 165, 0); triangle(o.x + o.w * 0.2, o.y + o.h * 0.45, o.x + o.w * 0.35, o.y + o.h * 0.5, o.x + o.w * 0.2, o.y + o.h * 0.55);
+        } else {
+            fill(o.color[0], o.color[1], o.color[2]); rect(o.x - o.w * 0.15, o.y, o.w * 0.3, o.h, 5);
+            fill(255, 0, 0); triangle(o.x - o.w * 0.15, o.y, o.x + o.w * 0.15, o.y, o.x, o.y - o.h * 0.3);
+            fill(255, 140, 0); triangle(o.x - o.w * 0.15, o.y + o.h, o.x - o.w * 0.3, o.y + o.h * 1.2, o.x - o.w * 0.15, o.y + o.h * 0.6);
+            triangle(o.x + o.w * 0.15, o.y + o.h, o.x + o.w * 0.3, o.y + o.h * 1.2, o.x + o.w * 0.15, o.y + o.h * 0.6);
+            fill(255, 200, 0, 180); ellipse(o.x, o.y + o.h * 1.2, o.w * 0.2, o.h * 0.4 + sin(frameCount * 0.3) * 5);
+        }
+        if (o.dodged) { fill(0, 255, 0, 150); textSize(24); textAlign(CENTER); text("✓", o.x, o.y - 15); }
+        pop();
+    }
+}
+
+function drawWarningArrows() {
+    const warnDist = width * 0.6;
+    for (const o of obstacles) {
+        if (o.dodged || o.hit || o.x <= width || o.x > width + warnDist) continue;
+        push();
+        const alpha = map(o.x, width + warnDist, width, 50, 255);
+        const ax = width - 80, ay = o.y + o.h / 2;
+        textAlign(CENTER, CENTER); textSize(48); noStroke();
+        if (o.requiredAction === 'JUMP') { fill(76, 175, 80, alpha); text("⬆", ax, ay); textSize(16); text("JUMP!", ax, ay + 35); }
+        else if (o.requiredAction === 'DUCK') { fill(41, 182, 246, alpha); text("⬇", ax, ay); textSize(16); text("DUCK!", ax, ay + 35); }
+        else { fill(255, 87, 34, alpha); text("⏬", ax, ay); textSize(16); text("SQUAT!", ax, ay + 35); }
+        pop();
+    }
+}
+
+function drawStunnedEffect() {
+    if (!isStunned) return;
+    push();
+    const dX = width * 0.2, gY = height * GROUND_Y_RATIO, ds = height * 0.35;
+    if (frameCount % 6 < 3) { fill(255, 255, 255, 100); noStroke(); ellipse(dX, gY - ds * 0.5, ds, ds); }
+    for (let i = 0; i < 5; i++) {
+        const a = frameCount * 0.1 + i * TWO_PI / 5;
+        fill(255, 255, 0); noStroke(); textSize(16);
+        text("✦", dX + cos(a) * ds * 0.4, gY - ds * 0.8 + sin(a * 1.5) * ds * 0.2);
+    }
+    pop();
+}
+
+// ======================== Timer & Score HUD ========================
+function drawGameHUD() {
+    if (gameMode !== MODE_PLAY || currentState !== STATE_LOCKED) return;
+    push();
+    const elapsed = (millis() - levelStartTime) / 1000;
+    const remaining = Math.max(0, LEVEL_DURATION - elapsed);
+
+    noStroke(); fill(0, 0, 0, 150); rect(width / 2 - 80, 10, 160, 50, 10);
+    fill(remaining < 10 ? color(255, 80, 80) : 255);
+    textAlign(CENTER, CENTER); textSize(32); textStyle(BOLD);
+    const mins = Math.floor(remaining / 60);
+    const secs = Math.floor(remaining % 60);
+    text(`${mins}:${secs.toString().padStart(2, '0')}`, width / 2, 35);
+
+    fill(0, 0, 0, 150); rect(10, 10, 150, 40, 10);
+    fill(255); textSize(20); textAlign(LEFT, CENTER);
+    text(`Score: ${score}/${totalObstacles}`, 20, 30);
+    textStyle(NORMAL); pop();
+
+    if (remaining <= 0) { currentState = STATE_VICTORY; playSound('victory'); }
+}
+
+function updateLevel() {
+    if (gameMode !== MODE_PLAY || currentState !== STATE_LOCKED) return;
+    const elapsed = (millis() - levelStartTime) / 1000;
+    while (nextObstacleIndex < LEVEL_SEQUENCE.length && LEVEL_SEQUENCE[nextObstacleIndex].t <= elapsed) {
+        spawnObstacle(LEVEL_SEQUENCE[nextObstacleIndex].type);
+        nextObstacleIndex++;
+    }
+    updateObstacles();
+}
+
+// ======================== Victory Screen ========================
+function drawVictoryScreen() {
+    background(30, 60, 90);
+    push(); textAlign(CENTER, CENTER); noStroke();
+
+    // Sky gradient
+    for (let y = 0; y < height * 0.6; y++) {
+        stroke(lerp(20, 135, y / (height * 0.6)), lerp(20, 206, y / (height * 0.6)), lerp(80, 235, y / (height * 0.6)));
+        line(0, y, width, y);
+    }
+    noStroke();
+    fill(244, 220, 160); rect(0, height * 0.6, width, height * 0.4);
+
+    // Sandcastle
+    const cx = width / 2, cy = height * 0.5, cs = height * 0.15;
+    fill(244, 208, 63); rect(cx - cs, cy, cs * 2, cs, 5);
+    rect(cx - cs * 0.9, cy - cs * 0.5, cs * 0.4, cs * 0.5, 3);
+    rect(cx + cs * 0.5, cy - cs * 0.5, cs * 0.4, cs * 0.5, 3);
+    rect(cx - cs * 0.2, cy - cs * 0.7, cs * 0.4, cs * 0.7, 3);
+    fill(255, 0, 0); rect(cx + cs * 0.05, cy - cs * 1.1, cs * 0.25, cs * 0.2);
+    stroke(100); strokeWeight(2);
+    line(cx + cs * 0.05, cy - cs * 1.1, cx + cs * 0.05, cy - cs * 0.7);
+    noStroke();
+
+    fill(255, 215, 0); textSize(min(64, width * 0.05)); textStyle(BOLD);
+    text("🎉 YOU WON! 🎉", width / 2, height * 0.15);
+
+    fill(255); textSize(28); textStyle(NORMAL);
+    text(`Dodged ${score} of ${totalObstacles} obstacles!`, width / 2, height * 0.75);
+
+    // Confetti
+    for (let i = 0; i < 30; i++) {
+        const px = (width * (i * 0.618 + frameCount * 0.001)) % width;
+        const py = (height * (i * 0.314 + frameCount * 0.002)) % height;
+        fill([255, 0, 100, 50, 255, 200][(i * 3) % 6], [215, 200, 255, 205, 100, 50][(i * 3 + 1) % 6], [0, 0, 100, 50, 50, 255][(i * 3 + 2) % 6], 200);
+        const sz = 5 + sin(frameCount * 0.05 + i) * 3;
+        if (i % 3 === 0) ellipse(px, py, sz, sz); else if (i % 3 === 1) rect(px, py, sz, sz * 1.5); else triangle(px, py - sz, px - sz, py + sz, px + sz, py + sz);
+    }
+
+    fill(255, 255, 255, 150 + sin(frameCount * 0.08) * 100); textSize(22);
+    text("Click anywhere to return to menu", width / 2, height * 0.88);
+    pop();
+}
+
+function drawPracticeHUD() {
+    if (gameMode !== MODE_PRACTICE || currentState !== STATE_LOCKED) return;
+    push(); noStroke();
+    fill(0, 0, 0, 150); rect(width / 2 - 100, 10, 200, 35, 10);
+    fill(41, 182, 246); textAlign(CENTER, CENTER); textSize(18); textStyle(BOLD);
+    text("PRACTICE MODE", width / 2, 27);
+    fill(0, 0, 0, 100); rect(width / 2 - 90, 50, 180, 25, 8);
+    fill(200); textSize(12); textStyle(NORMAL);
+    text("Press M to return to menu", width / 2, 62);
+    pop();
+}
+
+// ======================== Audio ========================
+function playSound(type) {
+    if (!audioCtx) return;
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.value = 0.15;
+        const now = audioCtx.currentTime;
+        if (type === 'dodge') {
+            osc.frequency.setValueAtTime(523, now);
+            osc.frequency.setValueAtTime(659, now + 0.05);
+            osc.frequency.setValueAtTime(784, now + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'hit') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'victory') {
+            osc.frequency.setValueAtTime(523, now);
+            osc.frequency.setValueAtTime(659, now + 0.15);
+            osc.frequency.setValueAtTime(784, now + 0.3);
+            osc.frequency.setValueAtTime(1047, now + 0.45);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+            osc.start(now); osc.stop(now + 0.7);
+        }
+    } catch (e) { /* audio not available */ }
+}
 // ======================== Movement Detection ========================
 function countSignChanges(history, noiseThresh) {
     let changes = 0, lastSign = 0;

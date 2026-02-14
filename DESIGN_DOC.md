@@ -52,34 +52,39 @@ To ensure the game works for a child at varying distances from the camera, all t
 
 ---
 
-## 4. Implementation Milestones (STOP & ASK FOR FEEDBACK AFTER EACH)
+## 4. Implementation Milestones
 
-### Milestone 1: Vision Baseline & Calibration
+> **Rule:** Make a git commit after completing each milestone.
+
+### Milestone 1: Vision Baseline & Calibration ✅
 
 * Setup project structure: `index.html`, `style.css`, `sketch.js`.
 * Initialize MediaPipe Pose with the webcam.
 * Implement the "Raise Hand" trigger and 3-second "Lock-In" countdown.
-* **Success Criteria:** User can lock the session, and a "Player Locked" message appears with  calculated.
 
-### Milestone 2: Gesture Engine (Logic Only)
+### Milestone 2: Gesture Engine (Logic Only) ✅
 
 * Implement the normalized math for Run, Jump, Duck, and Deep Squat.
-* Create an on-screen debug UI: three boxes that light up when the corresponding action is detected.
-* **Success Criteria:** Robust detection of all three movements at various distances from the camera. "Run" must not accidentally trigger "Jump."
+* Create an on-screen debug UI with live threshold readouts.
+* Refactored into sub-functions: `detectSquat`, `detectRun`, `detectJump`, `detectDuck`, `updateStateMachine`.
 
-### Milestone 3: The World & Character
+### Milestone 3: The World & Character ✅
 
-* Integrate a 2D character sprite and a scrolling beach background.
-* Map "Running" detection to background scroll speed (Binary: run = move, stop = still).
-* Add character animations for Jump, Duck, and Squat.
-* **Success Criteria:** The character responds fluidly to the physical movements.
+* Integrated scrolling beach background and procedural dino character.
+* Background scrolls during all active states (RUN, JUMP, DUCK, SQUAT).
+* Character animations for Jump, Duck, Squat, Run, and Idle.
 
-### Milestone 4: Level Design & Audio
+### Milestone 4: Level Design & Audio (Current)
 
-* Implement the 90-second level sequence with Shells and Seagulls.
-* Add the "Stunned" logic and visual arrows for assistance.
-* Add audio: "Boing" (jump), "Squawk" (bird), "Marching" (running), and victory music.
-* **Success Criteria:** Full 90-second playability from start to Sandcastle victory.
+* **Start Menu:** Title screen with mouse-clickable "Play Game" and "Practice Mode" buttons.
+  * **Practice Mode:** Free-roam with no timer/obstacles — for testing movement detection.
+  * **Play Game:** 60-second timed level with obstacles.
+* **Obstacles:** Shells (Jump), Seagulls (Duck), Rockets (Deep Squat).
+* **Stunned:** Flash + sparkle animation on collision. No game over.
+* **Warning Arrows:** ⬆/⬇/⏬ indicators 2 seconds before each obstacle.
+* **Timer & Score:** Countdown + dodge score displayed at top.
+* **Victory Screen:** Sandcastle with confetti at timer end.
+* **Audio:** Web Audio API placeholder tones (dodge chime, hit buzz, victory fanfare).
 
 ### Milestone 5: Deployment Preparation
 
