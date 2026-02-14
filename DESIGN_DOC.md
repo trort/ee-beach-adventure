@@ -137,7 +137,7 @@ To make "Beach Run Adventure" look and sound like a real game, you’ll need a f
 
 
 > **Asset Loading Protocol:**
-> 1. Start with colored placeholders (Rectangles for shells, Circles for birds).
-> 2. Once Milestone 2 is verified, replace placeholders with assets from the recommended sources.
-> 3. Use `p5.loadImage()` in the `preload()` function to handle assets.
-> 4. Ensure all assets are stored in an `/assets` folder within the project directory.
+> 1. Assets are preloaded in `sketch.js`.
+> 2. `draw` functions use `image()` to render sprites.
+> 3. Hitboxes remain distinct from visual sprites for gameplay balance.
+> 4. All assets stored in `/assets` folder.

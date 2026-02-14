@@ -14,7 +14,11 @@ let results = undefined;
 let isModelLoaded = false;
 
 // Assets
+// Assets
 let bgImage;
+let imgDinoRun, imgDinoJump, imgDinoDuck, imgDinoSquat;
+let imgShell, imgSeagull, imgRocket;
+let imgCastle;
 
 // Game State
 const STATE_WAITING = 0;
@@ -127,6 +131,14 @@ const LEVEL_SEQUENCE = [
 // ======================== Preload ========================
 window.preload = function () {
     bgImage = loadImage("assets/beach_bg.png");
+    imgDinoRun = loadImage("assets/dino_run.png");
+    imgDinoJump = loadImage("assets/dino_jump.png");
+    imgDinoDuck = loadImage("assets/dino_duck.png");
+    imgDinoSquat = loadImage("assets/dino_squat.png");
+    imgShell = loadImage("assets/obstacle_shell.png");
+    imgSeagull = loadImage("assets/obstacle_seagull.png");
+    imgRocket = loadImage("assets/obstacle_rocket.png");
+    imgCastle = loadImage("assets/goal_castle.png");
 };
 
 // ======================== MediaPipe Setup ========================
@@ -374,176 +386,37 @@ function drawDevOverlay() {
 // ======================== Dinosaur Character ========================
 function drawDino() {
     const groundY = height * GROUND_Y_RATIO;
-    const dinoSize = height * 0.35;
+    const dinoSize = height * 0.35; // 35% of screen height
     const dinoX = width * 0.2;
 
     push();
     dinoAnimTimer++;
 
-    let bodyY = groundY;
+    let img = imgDinoRun;
+    let y = groundY - dinoSize * 0.9; 
+    let w = dinoSize; 
+    let h = dinoSize;
 
     if (movementState === "JUMP") {
-        const jumpHeight = dinoSize * 2;
-        bodyY = groundY - jumpHeight * 0.7;
+        img = imgDinoJump;
+        y = groundY - dinoSize * 1.5; 
     } else if (movementState === "DUCK") {
-        bodyY = groundY;
-    } else if (movementState === "SQUAT") { // NEW: Squat state
-        bodyY = groundY + dinoSize * 0.1; // Lower center
-    }
-
-    const bodyColor = color(76, 175, 80);
-    const bellyColor = color(165, 214, 167);
-    const eyeWhite = color(255);
-    const eyePupil = color(33, 33, 33);
-
-    noStroke();
-
-    if (movementState === "SQUAT") {
-        // ---- SQUATTING DINO (Ball Mode) ----
-        const squatH = dinoSize * 0.6;
-        const squatW = dinoSize * 0.9;
-        const squatY = bodyY - squatH * 0.5;
-
-        // Round squat body
-        fill(bodyColor);
-        ellipse(dinoX, squatY, squatW, squatH);
-
-        // Belly patch
-        fill(bellyColor);
-        ellipse(dinoX, squatY + squatH * 0.1, squatW * 0.6, squatH * 0.6);
-
-        // Eye (looking forward/up)
-        fill(eyeWhite);
-        ellipse(dinoX + squatW * 0.2, squatY - squatH * 0.1, 10, 10);
-        fill(eyePupil);
-        ellipse(dinoX + squatW * 0.25, squatY - squatH * 0.1, 5, 5);
-
-    } else if (movementState === "DUCK") {
-        // ---- DUCKING DINO (Crouched) ----
-        const duckH = dinoSize * 0.5;
-        const duckW = dinoSize * 1.2;
-        const duckY = bodyY - duckH;
-
-        fill(bodyColor);
-        ellipse(dinoX, duckY + duckH * 0.4, duckW, duckH);
-        fill(bellyColor);
-        ellipse(dinoX, duckY + duckH * 0.5, duckW * 0.5, duckH * 0.5);
-        fill(bodyColor);
-        ellipse(dinoX + duckW * 0.35, duckY + duckH * 0.2, dinoSize * 0.35, dinoSize * 0.3);
-        fill(eyeWhite);
-        ellipse(dinoX + duckW * 0.42, duckY + duckH * 0.1, 8, 8);
-        fill(eyePupil);
-        ellipse(dinoX + duckW * 0.44, duckY + duckH * 0.1, 4, 4);
-
+        img = imgDinoDuck;
+        y = groundY - dinoSize * 0.75; 
+        w = dinoSize * 1.2; 
+        h = dinoSize * 0.8;
+    } else if (movementState === "SQUAT") {
+        img = imgDinoSquat;
+        y = groundY - dinoSize * 0.6;
+        w = dinoSize * 0.8;
+        h = dinoSize * 0.8;
     } else {
-        // ---- NORMAL / RUNNING / JUMPING ----
-        const headSize = dinoSize * 0.4;
-        const bodyW = dinoSize * 0.6;
-        const bodyH = dinoSize * 0.7;
-        const legLen = dinoSize * 0.3;
-
-        const bodyTop = bodyY - bodyH - legLen;
-        const bodyCenterY = bodyTop + bodyH / 2;
-
-        // Tail
-        fill(bodyColor);
-        beginShape();
-        vertex(dinoX - bodyW * 0.4, bodyCenterY - bodyH * 0.1);
-        vertex(dinoX - bodyW * 1.3, bodyCenterY - bodyH * 0.3);
-        vertex(dinoX - bodyW * 1.2, bodyCenterY + bodyH * 0.1);
-        vertex(dinoX - bodyW * 0.4, bodyCenterY + bodyH * 0.2);
-        endShape(CLOSE);
-
-        // Body
-        fill(bodyColor);
-        ellipse(dinoX, bodyCenterY, bodyW, bodyH);
-        fill(bellyColor);
-        ellipse(dinoX + bodyW * 0.05, bodyCenterY + bodyH * 0.1, bodyW * 0.5, bodyH * 0.5);
-
-        // Legs
-        fill(bodyColor);
-        if (movementState === "RUN") {
-            const legPhase = dinoAnimTimer * 0.3;
-            const leg1Angle = sin(legPhase) * 0.5;
-            const leg2Angle = sin(legPhase + PI) * 0.5;
-
-            push();
-            translate(dinoX - bodyW * 0.15, bodyCenterY + bodyH * 0.35);
-            rotate(leg1Angle);
-            rect(-4, 0, 8, legLen, 3);
-            ellipse(0, legLen, 14, 8);
-            pop();
-
-            push();
-            translate(dinoX + bodyW * 0.15, bodyCenterY + bodyH * 0.35);
-            rotate(leg2Angle);
-            rect(-4, 0, 8, legLen, 3);
-            ellipse(0, legLen, 14, 8);
-            pop();
-
-            // Arms
-            push();
-            translate(dinoX + bodyW * 0.25, bodyCenterY - bodyH * 0.05);
-            rotate(sin(legPhase) * 0.4);
-            rect(-3, 0, 6, dinoSize * 0.2, 3);
-            pop();
-        } else if (movementState === "JUMP") {
-            fill(bodyColor);
-            ellipse(dinoX - bodyW * 0.1, bodyCenterY + bodyH * 0.4, 12, 10);
-            ellipse(dinoX + bodyW * 0.1, bodyCenterY + bodyH * 0.4, 12, 10);
-
-            push();
-            translate(dinoX + bodyW * 0.3, bodyCenterY - bodyH * 0.2);
-            rotate(-0.8);
-            rect(-3, -dinoSize * 0.2, 6, dinoSize * 0.2, 3);
-            pop();
-            push();
-            translate(dinoX - bodyW * 0.1, bodyCenterY - bodyH * 0.3);
-            rotate(0.5);
-            rect(-3, -dinoSize * 0.15, 6, dinoSize * 0.15, 3);
-            pop();
-        } else {
-            const idleBounce = sin(dinoAnimTimer * 0.08) * 2;
-            rect(dinoX - bodyW * 0.18, bodyCenterY + bodyH * 0.35, 8, legLen + idleBounce, 3);
-            rect(dinoX + bodyW * 0.08, bodyCenterY + bodyH * 0.35, 8, legLen + idleBounce, 3);
-            ellipse(dinoX - bodyW * 0.14, bodyCenterY + bodyH * 0.35 + legLen + idleBounce, 14, 8);
-            ellipse(dinoX + bodyW * 0.12, bodyCenterY + bodyH * 0.35 + legLen + idleBounce, 14, 8);
-            push();
-            translate(dinoX + bodyW * 0.25, bodyCenterY);
-            rotate(0.3 + sin(dinoAnimTimer * 0.06) * 0.1);
-            rect(-3, 0, 6, dinoSize * 0.2, 3);
-            pop();
-        }
-
-        // Head
-        fill(bodyColor);
-        ellipse(dinoX + bodyW * 0.2, bodyTop - headSize * 0.2, headSize, headSize * 0.85);
-
-        // Eye
-        fill(eyeWhite);
-        const eyeX = dinoX + bodyW * 0.3;
-        const eyeY = bodyTop - headSize * 0.3;
-        ellipse(eyeX, eyeY, 12, 12);
-        fill(eyePupil);
-        const pupilOffX = movementState === "RUN" ? 2 : 0;
-        ellipse(eyeX + pupilOffX, eyeY, 5, 5);
-
-        // Mouth
-        stroke(color(40, 120, 40));
-        strokeWeight(2);
-        noFill();
-        const mouthX = dinoX + bodyW * 0.4;
-        const mouthY = bodyTop - headSize * 0.05;
-        arc(mouthX, mouthY, headSize * 0.3, headSize * 0.15, 0, PI);
-
-        // Spots
-        noStroke();
-        fill(56, 142, 60);
-        ellipse(dinoX - bodyW * 0.1, bodyCenterY - bodyH * 0.25, 6, 6);
-        ellipse(dinoX + bodyW * 0.05, bodyCenterY - bodyH * 0.3, 5, 5);
-        ellipse(dinoX - bodyW * 0.2, bodyCenterY - bodyH * 0.15, 4, 4);
+        // Run/Idle
+        y += sin(dinoAnimTimer * 0.2) * (dinoSize * 0.05);
     }
 
+    imageMode(CENTER);
+    image(img, dinoX + w/2, y + h/2, w, h);
     pop();
 }
 
@@ -959,32 +832,30 @@ function updateObstacles() {
 }
 
 function drawObstacles() {
+    imageMode(CENTER);
     for (const o of obstacles) {
-        push(); noStroke();
-        if (o.type === 'SHELL') {
-            fill(o.color[0], o.color[1], o.color[2]);
-            ellipse(o.x, o.y + o.h * 0.3, o.w, o.h);
-            fill(255, 218, 185); ellipse(o.x, o.y + o.h * 0.4, o.w * 0.6, o.h * 0.5);
-            stroke(210, 140, 80); strokeWeight(1);
-            for (let j = -2; j <= 2; j++) line(o.x + j * o.w * 0.12, o.y, o.x + j * o.w * 0.15, o.y + o.h * 0.7);
-        } else if (o.type === 'SEAGULL') {
-            const wf = sin(frameCount * 0.15) * o.h * 0.4;
-            fill(255); ellipse(o.x, o.y + o.h / 2, o.w * 0.4, o.h * 0.5);
-            beginShape(); vertex(o.x - o.w * 0.5, o.y + o.h / 2 + wf); vertex(o.x - o.w * 0.15, o.y + o.h / 2);
-            vertex(o.x, o.y + o.h / 2 - o.h * 0.1); vertex(o.x + o.w * 0.15, o.y + o.h / 2);
-            vertex(o.x + o.w * 0.5, o.y + o.h / 2 - wf); endShape();
-            fill(0); ellipse(o.x + o.w * 0.1, o.y + o.h * 0.4, 4, 4);
-            fill(255, 165, 0); triangle(o.x + o.w * 0.2, o.y + o.h * 0.45, o.x + o.w * 0.35, o.y + o.h * 0.5, o.x + o.w * 0.2, o.y + o.h * 0.55);
-        } else {
-            fill(o.color[0], o.color[1], o.color[2]); rect(o.x - o.w * 0.15, o.y, o.w * 0.3, o.h, 5);
-            fill(255, 0, 0); triangle(o.x - o.w * 0.15, o.y, o.x + o.w * 0.15, o.y, o.x, o.y - o.h * 0.3);
-            fill(255, 140, 0); triangle(o.x - o.w * 0.15, o.y + o.h, o.x - o.w * 0.3, o.y + o.h * 1.2, o.x - o.w * 0.15, o.y + o.h * 0.6);
-            triangle(o.x + o.w * 0.15, o.y + o.h, o.x + o.w * 0.3, o.y + o.h * 1.2, o.x + o.w * 0.15, o.y + o.h * 0.6);
-            fill(255, 200, 0, 180); ellipse(o.x, o.y + o.h * 1.2, o.w * 0.2, o.h * 0.4 + sin(frameCount * 0.3) * 5);
+        push();
+        translate(o.x, o.y + o.h/2);
+        
+        let img;
+        if (o.type === 'SHELL') img = imgShell;
+        else if (o.type === 'SEAGULL') img = imgSeagull;
+        else img = imgRocket;
+
+        if (o.type === 'SEAGULL') translate(0, sin(frameCount * 0.1) * o.h * 0.2);
+        
+        image(img, 0, 0, o.w * 1.3, o.h * 1.3); 
+
+        if (o.dodged) {
+            noStroke();
+            fill(0, 255, 0, 200);
+            textSize(32);
+            textAlign(CENTER, CENTER);
+            text("✓", 0, -o.h);
         }
-        if (o.dodged) { fill(0, 255, 0, 150); textSize(24); textAlign(CENTER); text("✓", o.x, o.y - 15); }
         pop();
     }
+    imageMode(CORNER);
 }
 
 function drawWarningArrows() {
@@ -1052,7 +923,6 @@ function drawVictoryScreen() {
     background(30, 60, 90);
     push(); textAlign(CENTER, CENTER); noStroke();
 
-    // Sky gradient
     for (let y = 0; y < height * 0.6; y++) {
         stroke(lerp(20, 135, y / (height * 0.6)), lerp(20, 206, y / (height * 0.6)), lerp(80, 235, y / (height * 0.6)));
         line(0, y, width, y);
@@ -1060,24 +930,19 @@ function drawVictoryScreen() {
     noStroke();
     fill(244, 220, 160); rect(0, height * 0.6, width, height * 0.4);
 
-    // Sandcastle
-    const cx = width / 2, cy = height * 0.5, cs = height * 0.15;
-    fill(244, 208, 63); rect(cx - cs, cy, cs * 2, cs, 5);
-    rect(cx - cs * 0.9, cy - cs * 0.5, cs * 0.4, cs * 0.5, 3);
-    rect(cx + cs * 0.5, cy - cs * 0.5, cs * 0.4, cs * 0.5, 3);
-    rect(cx - cs * 0.2, cy - cs * 0.7, cs * 0.4, cs * 0.7, 3);
-    fill(255, 0, 0); rect(cx + cs * 0.05, cy - cs * 1.1, cs * 0.25, cs * 0.2);
-    stroke(100); strokeWeight(2);
-    line(cx + cs * 0.05, cy - cs * 1.1, cx + cs * 0.05, cy - cs * 0.7);
-    noStroke();
+    const castleSize = min(width, height) * 0.6;
+    imageMode(CENTER);
+    image(imgCastle, width/2, height * 0.6, castleSize, castleSize);
+    imageMode(CORNER);
 
-    fill(255, 215, 0); textSize(min(64, width * 0.05)); textStyle(BOLD);
+    fill(255, 215, 0); textSize(min(64, width * 0.08)); textStyle(BOLD);
+    text("🎉 YOU WON! 🎉", width / 2, height * 0.15);
+    stroke(0); strokeWeight(4); noFill();
     text("🎉 YOU WON! 🎉", width / 2, height * 0.15);
 
-    fill(255); textSize(28); textStyle(NORMAL);
-    text(`Dodged ${score} of ${totalObstacles} obstacles!`, width / 2, height * 0.75);
+    fill(255); noStroke(); textSize(28); textStyle(NORMAL);
+    text(`Dodged ${score} of ${totalObstacles} obstacles!`, width / 2, height * 0.9);
 
-    // Confetti
     for (let i = 0; i < 30; i++) {
         const px = (width * (i * 0.618 + frameCount * 0.001)) % width;
         const py = (height * (i * 0.314 + frameCount * 0.002)) % height;
@@ -1087,7 +952,7 @@ function drawVictoryScreen() {
     }
 
     fill(255, 255, 255, 150 + sin(frameCount * 0.08) * 100); textSize(22);
-    text("Click anywhere to return to menu", width / 2, height * 0.88);
+    text("Click anywhere to return to menu", width / 2, height * 0.96);
     pop();
 }
 
