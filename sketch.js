@@ -29,41 +29,39 @@ let referenceU = 0; // Initial "Unit of Measure" (Nose-to-Hip)
 
 // Movement State
 let movementState = "IDLE";
-let isRunning = false;
-let isJumping = false;
-let isDucking = false;
-let isFlat = false;
 
 // Scale Invariance (Running Average of U)
 let uHistory = [];
 const U_WINDOW = 30;
 let currentU = 0; // The active "Unit of Measure" for this frame
 
-// Run detection (Hip-Relative Knee Lift)
-let kneeDiffHistory = [];
+// Run detection (Alternating Ankle Lift)
+let ankleDiffHistory = [];
 const RUN_WINDOW = 40;
 const MIN_RUN_SIGN_CHANGES = 2;
 let runCooldown = 0;
-const RUN_COOLDOWN_FRAMES = 15;
+const RUN_COOLDOWN_FRAMES = 30;
 
 // Jump detection — velocity-based
 let shoulderYHistory = [];
 const JUMP_VELOCITY_WINDOW = 5;
 let jumpCooldown = 0;
-const JUMP_COOLDOWN_FRAMES = 6;
+const JUMP_COOLDOWN_FRAMES = 20;
 
 // Duck detection — Compactness + Velocity
 let noseYHistory = [];
 const DUCK_VELOCITY_WINDOW = 5;
 let duckCooldown = 0;
-const DUCK_COOLDOWN_FRAMES = 6;
+const DUCK_COOLDOWN_FRAMES = 20;
 
-// Lying Flat detection (Spine Angle)
-let flatCooldown = 0;
-const FLAT_COOLDOWN_FRAMES = 10;
+// Deep Squat detection
+let squatCooldown = 0;
+const SQUAT_COOLDOWN_FRAMES = 20;
+let squatConsecutiveFrames = 0;
+const SQUAT_MIN_FRAMES = 3;
 
 // Opposite-action lockout
-const OPPOSITE_LOCKOUT_FRAMES = 20;
+const OPPOSITE_LOCKOUT_FRAMES = 30;
 let jumpLockout = 0;
 let duckLockout = 0;
 
@@ -216,7 +214,7 @@ function drawGameWorld() {
         const bgScale = height / bgImage.height;
         const bgW = bgImage.width * bgScale;
 
-        if (isRunning) {
+        if (movementState !== "IDLE") { // Scroll during RUN, JUMP, DUCK, SQUAT
             bgX -= BG_SCROLL_SPEED;
         }
         if (bgX <= -bgW) bgX += bgW;
@@ -265,17 +263,20 @@ function resetToWaiting() {
     currentU = 0;
     uHistory = [];
     movementState = "IDLE";
-    isRunning = false;
-    isJumping = false;
-    isDucking = false;
-    isFlat = false;
-    kneeDiffHistory = [];
+    
+    
+    
+    
+    ankleDiffHistory = [];
     runCooldown = 0;
     shoulderYHistory = [];
     jumpCooldown = 0;
     noseYHistory = [];
     duckCooldown = 0;
-    flatCooldown = 0;
+    squatCooldown = 0;
+    squatConsecutiveFrames = 0;
+    jumpLockout = 0;
+    duckLockout = 0;
     bgX = 0;
     dinoAnimTimer = 0;
     debugInfo = {};
@@ -309,7 +310,7 @@ function drawDevOverlay() {
 // ======================== Dinosaur Character ========================
 function drawDino() {
     const groundY = height * GROUND_Y_RATIO;
-    const dinoSize = height * 0.12;
+    const dinoSize = height * 0.35;
     const dinoX = width * 0.2;
 
     push();
@@ -322,8 +323,8 @@ function drawDino() {
         bodyY = groundY - jumpHeight * 0.7;
     } else if (movementState === "DUCK") {
         bodyY = groundY;
-    } else if (movementState === "FLAT") { // NEW: Flat state
-        bodyY = groundY + dinoSize * 0.2; // Slightly lower visually
+    } else if (movementState === "SQUAT") { // NEW: Squat state
+        bodyY = groundY + dinoSize * 0.1; // Lower center
     }
 
     const bodyColor = color(76, 175, 80);
@@ -333,25 +334,25 @@ function drawDino() {
 
     noStroke();
 
-    if (movementState === "FLAT") {
-        // ---- LYING FLAT DINO (Pancake Mode) ----
-        const flatH = dinoSize * 0.4;
-        const flatW = dinoSize * 1.5;
-        const flatY = bodyY - flatH;
+    if (movementState === "SQUAT") {
+        // ---- SQUATTING DINO (Ball Mode) ----
+        const squatH = dinoSize * 0.6;
+        const squatW = dinoSize * 0.9;
+        const squatY = bodyY - squatH * 0.5;
 
-        // Long flat body
+        // Round squat body
         fill(bodyColor);
-        rect(dinoX - flatW / 2, flatY, flatW, flatH, 10);
+        ellipse(dinoX, squatY, squatW, squatH);
 
-        // Head on ground
-        fill(bodyColor);
-        ellipse(dinoX + flatW / 2, flatY + flatH / 2, flatH * 1.2, flatH);
+        // Belly patch
+        fill(bellyColor);
+        ellipse(dinoX, squatY + squatH * 0.1, squatW * 0.6, squatH * 0.6);
 
-        // Eye (looking up/startled)
+        // Eye (looking forward/up)
         fill(eyeWhite);
-        ellipse(dinoX + flatW / 2 + 5, flatY + flatH / 2 - 5, 8, 8);
+        ellipse(dinoX + squatW * 0.2, squatY - squatH * 0.1, 10, 10);
         fill(eyePupil);
-        ellipse(dinoX + flatW / 2 + 5, flatY + flatH / 2 - 5, 4, 4);
+        ellipse(dinoX + squatW * 0.25, squatY - squatH * 0.1, 5, 5);
 
     } else if (movementState === "DUCK") {
         // ---- DUCKING DINO (Crouched) ----
@@ -549,7 +550,7 @@ function drawUI() {
             { label: "JUMP", active: movementState === "JUMP", col: color(255, 235, 59) },
             { label: "RUN", active: movementState === "RUN", col: color(76, 175, 80) },
             { label: "DUCK", active: movementState === "DUCK", col: color(41, 182, 246) },
-            { label: "FLAT", active: movementState === "FLAT", col: color(255, 87, 34) },
+            { label: "SQUAT", active: movementState === "SQUAT", col: color(255, 87, 34) },
         ];
 
         const totalW = boxW * items.length + gap * (items.length - 1);
@@ -577,77 +578,64 @@ function drawDebugPanel() {
     textAlign(LEFT, TOP);
     noStroke();
 
-    if (currentState === STATE_WAITING || currentState === STATE_COUNTDOWN) {
-        // ... (Keep existing waiting debug info)
-        const safeVal = (obj, key) => {
-            if (!obj || obj[key] === undefined) return "N/A";
-            return typeof obj[key] === "number" ? obj[key].toFixed(3) : String(obj[key]);
-        };
-        const panels = [
-            { label: "L HAND", wrist: debugInfo.leftWrist, ear: debugInfo.leftEar, raised: debugInfo.leftRaised, yOffset: 0 },
-            { label: "R HAND", wrist: debugInfo.rightWrist, ear: debugInfo.rightEar, raised: debugInfo.rightRaised, yOffset: 75 },
-        ];
-        for (const p of panels) {
-            fill(0, 0, 0, 180);
-            rect(10, 100 + p.yOffset, 260, 65, 5);
-            fill(p.raised ? color(0, 255, 100) : color(255, 80, 80));
-            textSize(14);
-            textStyle(BOLD);
-            text(p.label + ": " + (p.raised ? "RAISED" : "DOWN"), 20, 105 + p.yOffset);
-            textStyle(NORMAL);
-            fill(255);
-            textSize(12);
-            text("Wrist Y: " + safeVal(p.wrist, "y") + "  Vis: " + safeVal(p.wrist, "visibility"), 20, 125 + p.yOffset);
-            text("Ear  Y: " + safeVal(p.ear, "y") + "  Vis: " + safeVal(p.ear, "visibility"), 20, 140 + p.yOffset);
-        }
+    // Background
+    fill(0, 0, 0, 200);
+    rect(10, 80, 400, 300, 8);
 
-    } else if (currentState === STATE_LOCKED && debugInfo.movement) {
-        fill(0, 0, 0, 200);
-        rect(10, 100, 500, 360, 8); // Taller panel for more info
-        fill(255);
-        textSize(22);
-        textStyle(BOLD);
-        text("MOVEMENT DATA", 20, 115);
-        textStyle(NORMAL);
-        textSize(16);
+    fill(255);
+    textSize(20);
+    textStyle(BOLD);
 
-        const m = debugInfo.movement;
-
-        // Col 1: Basics
-        fill(255, 255, 0); text(`Unit U: ${m.U}`, 20, 145);
-        fill(255); text(`State: ${m.state}`, 200, 145);
-
-        // Col 2: Gestures
-        fill(200); text("--- RUN (Hip-Rel Knees) ---", 20, 175);
-        fill(255); text(`LKnee: ${m.lKnee}  RKnee: ${m.rKnee}`, 20, 195);
-        text(`Amp: ${m.diffAmp}  Signs: ${m.signs}`, 20, 215);
-        if (m.antiJump) { fill(255, 0, 0); text("ANTI-JUMP ACTIVE", 200, 215); }
-
-        fill(200); text("--- JUMP (Vel) ---", 20, 245);
-        fill(255); text(`Vel: ${m.jumpVel}  Thresh: ${m.jumpThresh}`, 20, 265);
-
-        fill(200); text("--- DUCK (Compact/Vel) ---", 260, 175);
-        fill(255); text(`Comp: ${m.compRatio}  Thresh: <0.65`, 260, 195);
-        text(`Vel: ${m.duckVel}  Thresh: ${m.duckThresh}`, 260, 215);
-        if (m.spineTilt) { fill(255, 0, 0); text("SPINE TILT > 60", 260, 235); }
-
-        fill(200); text("--- FLAT (Angle) ---", 260, 245);
-        fill(255); text(`Angle: ${m.spineAngle}°  BoxRatio: ${m.boxRatio}`, 260, 265);
-
-        fill(150); text(`CD: R${m.rCD} J${m.jCD} D${m.dCD} F${m.fCD}`, 20, 320);
-        text(`Lock: J${m.jLock} D${m.dLock}`, 20, 340);
+    if (currentState !== STATE_LOCKED) {
+        text("RAISE HAND TO START", 30, 100);
+        pop();
+        return;
     }
 
-    fill(0, 0, 0, 180);
-    rect(10, 470, 160, 25, 5);
-    fill(255);
-    textSize(12);
-    const stateNames = ["WAITING", "COUNTDOWN", "LOCKED"];
-    text("State: " + (stateNames[currentState] || "?"), 20, 475);
+    const m = debugInfo.movement;
+    if (!m) { pop(); return; }
 
-    fill(255, 255, 255, 100);
-    textSize(10);
-    text("Press D to toggle debug", 20, 500);
+    let y = 100;
+    const dy = 35;
+
+    // STATE
+    textSize(30);
+    fill(0, 255, 255);
+    text(`STATE: ${m.state}`, 20, y);
+    y += 45;
+
+    textSize(18);
+    fill(200);
+    text(`Unit U: ${m.U}`, 20, y);
+    y += dy;
+
+    // SQUAT
+    const squatVal = parseFloat(m.hipAnkDist); // Distance
+    const squatThresh = (0.7 * parseFloat(m.U)).toFixed(2);
+    if (squatVal < parseFloat(squatThresh)) fill(0, 255, 0); else fill(255);
+    text(`SQUAT (Legs): ${squatVal} < ${squatThresh}`, 20, y);
+    y += dy;
+
+    // RUN
+    const runVal = parseFloat(m.diffAmp);
+    const runThresh = (0.10 * parseFloat(m.U)).toFixed(2);
+    if (runVal > parseFloat(runThresh)) fill(0, 255, 0); else fill(255);
+    text(`RUN (AnkAmp): ${runVal} > ${runThresh}`, 20, y);
+    y += dy;
+
+    // JUMP
+    const jumpVal = parseFloat(m.jumpVel);
+    const jumpThresh = (0.08 * parseFloat(m.U)).toFixed(2);
+    if (jumpVal > parseFloat(jumpThresh)) fill(0, 255, 0); else fill(255);
+    text(`JUMP (Vel): ${jumpVal} > ${jumpThresh}`, 20, y);
+    y += dy;
+
+    // DUCK
+    const duckVal = parseFloat(m.compRatio);
+    const duckThresh = 0.60;
+    if (duckVal < duckThresh) fill(0, 255, 0); else fill(255);
+    text(`DUCK (Cmpt): ${duckVal} < ${duckThresh}`, 20, y);
+
     pop();
 }
 
@@ -735,7 +723,7 @@ function lockPlayer(landmarks) {
 
         // Reset process
         runCooldown = 0;
-        kneeDiffHistory = [];
+        ankleDiffHistory = [];
         bgX = 0;
         console.log("Player Locked! Reference U:", referenceU);
     }
@@ -753,13 +741,139 @@ function countSignChanges(history, noiseThresh) {
     return changes;
 }
 
+// --- Gesture Detectors ---
+
+function detectSquat(leftAnkle, rightAnkle, midHipY, landmarks) {
+    let isSquatting = false;
+    let hipAnkleDist = null;
+
+    if (leftAnkle && rightAnkle) {
+        const midAnkleY = (leftAnkle.y + rightAnkle.y) / 2;
+        hipAnkleDist = midAnkleY - midHipY;
+        if (hipAnkleDist < 0.7 * currentU) {
+            isSquatting = true;
+        }
+    }
+
+    // Backup: Bounding Box Ratio
+    let minX = 1, maxX = 0, minY = 1, maxY = 0;
+    for (let lm of landmarks) {
+        if (lm.x < minX) minX = lm.x;
+        if (lm.x > maxX) maxX = lm.x;
+        if (lm.y < minY) minY = lm.y;
+        if (lm.y > maxY) maxY = lm.y;
+    }
+    const boxRatio = (maxX - minX) / (maxY - minY);
+    if (boxRatio > 1.5) isSquatting = true;
+
+    return { isSquatting, hipAnkleDist, boxRatio };
+}
+
+function detectRun(leftAnkle, rightAnkle, midHipY) {
+    let isRunningFrame = false;
+    let ankDiff = 0;
+
+    if (leftAnkle && rightAnkle) {
+        ankDiff = leftAnkle.y - rightAnkle.y;
+        ankleDiffHistory.push(ankDiff);
+        if (ankleDiffHistory.length > RUN_WINDOW) ankleDiffHistory.shift();
+
+        const signChanges = countSignChanges(ankleDiffHistory, 0.05 * currentU);
+        const ampStart = ankleDiffHistory.length - Math.min(10, ankleDiffHistory.length);
+        let maxAmp = 0;
+        for (let i = ampStart; i < ankleDiffHistory.length; i++) {
+            if (Math.abs(ankleDiffHistory[i]) > maxAmp) maxAmp = Math.abs(ankleDiffHistory[i]);
+        }
+
+        // Anti-Jump Guard
+        const avgAnkleY = (leftAnkle.y + rightAnkle.y) / 2;
+        const isJumpSquat = (avgAnkleY - midHipY) < 0.5 * currentU;
+
+        if (signChanges >= MIN_RUN_SIGN_CHANGES && maxAmp > 0.10 * currentU && !isJumpSquat) {
+            isRunningFrame = true;
+        }
+    }
+    return { isRunningFrame, ankDiff };
+}
+
+function detectJump(midShoulderY) {
+    shoulderYHistory.push(midShoulderY);
+    if (shoulderYHistory.length > JUMP_VELOCITY_WINDOW) shoulderYHistory.shift();
+
+    const jumpVel = shoulderYHistory[0] - shoulderYHistory[shoulderYHistory.length - 1];
+    const jumpThresh = 0.08 * currentU;
+    return { isJumpingFrame: jumpVel > jumpThresh, jumpVel, jumpThresh };
+}
+
+function detectDuck(nose, midHipY, midShoulderX, midShoulderY, midHipX) {
+    const compRatio = Math.abs(nose.y - midHipY) / currentU;
+
+    noseYHistory.push(nose.y);
+    if (noseYHistory.length > DUCK_VELOCITY_WINDOW) noseYHistory.shift();
+    const duckVel = noseYHistory[noseYHistory.length - 1] - noseYHistory[0];
+    const duckVelThresh = 0.12 * currentU;
+
+    const dx = Math.abs(midShoulderX - midHipX);
+    const dy = Math.abs(midShoulderY - midHipY);
+    const isSpineVertical = degrees(Math.atan2(dx, dy)) < 30;
+
+    return { isDuckingFrame: (compRatio < 0.60 || duckVel > duckVelThresh) && isSpineVertical, compRatio, duckVel };
+}
+
+// --- State Machine ---
+
+function updateStateMachine(squat, run, jump, duck) {
+    // Decrement cooldowns
+    if (runCooldown > 0) runCooldown--;
+    if (jumpCooldown > 0) jumpCooldown--;
+    if (duckCooldown > 0) duckCooldown--;
+    if (squatCooldown > 0) squatCooldown--;
+    if (jumpLockout > 0) jumpLockout--;
+    if (duckLockout > 0) duckLockout--;
+
+    // Squat debounce: must persist for N consecutive frames
+    squatConsecutiveFrames = squat.isSquatting ? squatConsecutiveFrames + 1 : 0;
+    const squatConfirmed = squatConsecutiveFrames >= SQUAT_MIN_FRAMES;
+
+    // --- State Transitions (priority order) ---
+    // 1. SQUAT (highest, debounced)
+    if (squatConfirmed && squatCooldown === 0) {
+        movementState = "SQUAT";
+        squatCooldown = SQUAT_COOLDOWN_FRAMES;
+    }
+    // 2. JUMP
+    else if (jump.isJumpingFrame && jumpCooldown === 0 && jumpLockout === 0 && movementState !== "SQUAT" && (movementState !== "RUN" || jump.jumpVel > 0.15 * currentU)) {
+        movementState = "JUMP";
+        jumpCooldown = JUMP_COOLDOWN_FRAMES;
+        duckLockout = OPPOSITE_LOCKOUT_FRAMES;
+    }
+    // 3. DUCK
+    else if (duck.isDuckingFrame && duckCooldown === 0 && duckLockout === 0 && movementState !== "SQUAT" && movementState !== "JUMP") {
+        movementState = "DUCK";
+        duckCooldown = DUCK_COOLDOWN_FRAMES;
+        jumpLockout = OPPOSITE_LOCKOUT_FRAMES;
+    }
+    // 4. RUN (can re-trigger while already running — keeps it smooth)
+    else if (run.isRunningFrame && runCooldown === 0) {
+        movementState = "RUN";
+        runCooldown = RUN_COOLDOWN_FRAMES;
+    }
+
+    // --- IDLE Reset (always checked, outside else chain) ---
+    if (movementState === "RUN" && runCooldown === 0 && !run.isRunningFrame) movementState = "IDLE";
+    if (movementState === "JUMP" && jumpCooldown === 0) movementState = "IDLE";
+    if (movementState === "DUCK" && duckCooldown === 0) movementState = "IDLE";
+    if (movementState === "SQUAT" && squatCooldown === 0) movementState = "IDLE";
+}
+
+// --- Main Entry Point ---
+
 function checkMovement(landmarks) {
     if (referenceU === 0) return;
 
     const nose = landmarks[0];
     const leftShoulder = landmarks[11], rightShoulder = landmarks[12];
     const leftHip = landmarks[23], rightHip = landmarks[24];
-    const leftKnee = landmarks[25], rightKnee = landmarks[26];
 
     if (!nose || !leftShoulder || !rightShoulder || !leftHip || !rightHip) return;
 
@@ -768,168 +882,35 @@ function checkMovement(landmarks) {
     const midHipX = (leftHip.x + rightHip.x) / 2;
     const midShoulderX = (leftShoulder.x + rightShoulder.x) / 2;
 
-    // 0. Update 'U' (Runnning Average)
+    // Update 'U' (Running Average)
     const rawU = Math.abs(midHipY - nose.y);
     uHistory.push(rawU);
     if (uHistory.length > U_WINDOW) uHistory.shift();
     currentU = uHistory.reduce((a, b) => a + b, 0) / uHistory.length;
 
-    // --- 1. Lying Flat Detection (Spine Angle) ---
-    // Angle 0 = Upright (Vertical), 90 = Flat (Horizontal)
-    // dx is x diff, dy is y diff (shoulder to hip)
-    const dx = Math.abs(midShoulderX - midHipX);
-    const dy = Math.abs(midShoulderY - midHipY);
-    const spineAngleRad = Math.atan2(dx, dy);
-    const spineAngleDeg = degrees(spineAngleRad);
+    // Detect gestures
+    const leftAnkle = landmarks[27], rightAnkle = landmarks[28];
+    const squat = detectSquat(leftAnkle, rightAnkle, midHipY, landmarks);
+    const run = detectRun(leftAnkle, rightAnkle, midHipY);
+    const jump = detectJump(midShoulderY);
+    const duck = detectDuck(nose, midHipY, midShoulderX, midShoulderY, midHipX);
 
-    // Bounding Box Ratio check (backup)
-    let minX = 1, maxX = 0, minY = 1, maxY = 0;
-    for (let lm of landmarks) {
-        if (lm.x < minX) minX = lm.x;
-        if (lm.x > maxX) maxX = lm.x;
-        if (lm.y < minY) minY = lm.y;
-        if (lm.y > maxY) maxY = lm.y;
-    }
-    const boxW = maxX - minX;
-    const boxH = maxY - minY;
-    const boxRatio = boxW / boxH;
+    // Update state machine
+    updateStateMachine(squat, run, jump, duck);
 
-    const flatDetected = (spineAngleDeg > 60) || (boxRatio > 1.5);
-
-    if (flatDetected) {
-        flatCooldown = FLAT_COOLDOWN_FRAMES;
-    } else if (flatCooldown > 0) flatCooldown--;
-    isFlat = flatCooldown > 0;
-
-    // --- 2. Run Detection (Hip-Relative Knees) ---
-    // Sign changes in relative knee height
-    let relKneeL = 0, relKneeR = 0;
-    let kneeDataOk = false;
-    if (leftKnee && rightKnee && leftKnee.visibility > 0.5 && rightKnee.visibility > 0.5) {
-        // Higher value Y is lower on screen. 
-        // Relative Height = constant - Y. Positive means "up".
-        relKneeL = midHipY - leftKnee.y;  // e.g. Hip 0.6, Knee 0.8 -> Diff -0.2 (Knee below hip)
-        // Knee raised: Hip 0.6, Knee 0.5 -> Diff 0.1 (Knee above hip)
-        // Actually, let's just use difference between Left/Right relative heights
-        // (midHipY - leftKneeY) - (midHipY - rightKneeY) = rightKneeY - leftKneeY
-        // So raw Y diff is still equivalent for the *oscillation*, but checking individual knees helps anti-jump
-
-        // Let's stick to the Oscillation Metric: RightKneeY - LeftKneeY
-        // If > 0, Right is lower (Y is bigger), Left is higher. 
-        const kneeOscillation = rightKnee.y - leftKnee.y;
-
-        kneeDiffHistory.push(kneeOscillation);
-        if (kneeDiffHistory.length > RUN_WINDOW) kneeDiffHistory.shift();
-        kneeDataOk = true;
-    } else {
-        // fallback to wrist? nah, focus on knees for milestone 3 logic
-        kneeDiffHistory.push(0);
-        if (kneeDiffHistory.length > RUN_WINDOW) kneeDiffHistory.shift();
-    }
-
-    const signChanges = countSignChanges(kneeDiffHistory, 0.005);
-    const diffAmp = kneeDiffHistory.length > 1
-        ? Math.max(...kneeDiffHistory) - Math.min(...kneeDiffHistory)
-        : 0;
-
-    // Anti-Jump Guard: Are BOTH knees significantly lifted?
-    // "Lifted" means y distance from hip is small (knees close to hip)
-    // Normalized check: if (midHipY - kneeY) > -0.2 * U ? 
-    // Standard standing: Knee is far below hip (large negative). High knees: closer to 0.
-    // Let's use: if Knee Y is above (Hip Y + 2*U) ... Wait, Y grows down.
-    // HipY is approx 0.5. KneeY approx 0.8. 
-    // Run = one knee 0.8, one 0.6.
-    // Jump = both knees 0.6? Or just whole body moves up.
-    // Actually, "Run" is just detecting the *alternation*. 
-    // The "Anti-Jump" logic in doc says: If LeftKneeUp AND RightKneeUp -> Not Run.
-    // Let's define "Up" as: KneeY < HipY + 0.35 * U (Closer to hip than standing)
-    const kneeThreshold = midHipY + 0.35 * currentU;
-    const lKneeUp = leftKnee.y < kneeThreshold;
-    const rKneeUp = rightKnee.y < kneeThreshold;
-    const bothKneesUp = lKneeUp && rKneeUp;
-
-    const runThresh = 0.02; // Keep raw or make U-based? 0.02 is ~1/50th screen. U is ~1/5th. 
-    // So 0.1 * U is approx 0.02.
-    const uRunAmp = 0.3 * currentU; // Require reasonable amplitude relative to body size
-
-    const runDetected = signChanges >= MIN_RUN_SIGN_CHANGES && diffAmp > (0.15 * currentU) && !bothKneesUp;
-
-    if (runDetected) runCooldown = RUN_COOLDOWN_FRAMES;
-    else if (runCooldown > 0) runCooldown--;
-    isRunning = runCooldown > 0;
-
-    // --- 3. Jump Detection (U-Based Velocity) ---
-    shoulderYHistory.push(midShoulderY);
-    if (shoulderYHistory.length > JUMP_VELOCITY_WINDOW) shoulderYHistory.shift();
-
-    let jumpVelocity = 0;
-    if (shoulderYHistory.length === JUMP_VELOCITY_WINDOW) {
-        jumpVelocity = shoulderYHistory[0] - shoulderYHistory[shoulderYHistory.length - 1];
-    }
-
-    const jumpThresh = 0.08 * currentU; // Scale invariant threshold!
-    const jumpDetected = jumpVelocity > jumpThresh && jumpLockout === 0;
-
-    if (jumpDetected) {
-        jumpCooldown = JUMP_COOLDOWN_FRAMES;
-        noseYHistory = []; // Reset duck history so landing doesn't trigger duck
-    } else if (jumpCooldown > 0) {
-        jumpCooldown--;
-        if (jumpCooldown === 0) duckLockout = OPPOSITE_LOCKOUT_FRAMES;
-    }
-    if (jumpLockout > 0) jumpLockout--;
-    isJumping = jumpCooldown > 0;
-
-    // --- 4. Duck Detection (Compactness + Velocity) ---
-    // Compactness: Body Height (Nose to Hip) vs U
-    // When standing, BodyHeight = U. When ducking, BodyHeight < 0.7 * U
-    const currentBodyH = Math.abs(midHipY - nose.y);
-    const compactnessRatio = currentBodyH / currentU;
-
-    // Velocity check (supplementary)
-    noseYHistory.push(nose.y);
-    if (noseYHistory.length > DUCK_VELOCITY_WINDOW) noseYHistory.shift();
-    let duckVelocity = 0;
-    if (noseYHistory.length === DUCK_VELOCITY_WINDOW) {
-        duckVelocity = noseYHistory[noseYHistory.length - 1] - noseYHistory[0]; // Downward movement = positive Y diff
-    }
-    const duckVelThresh = 0.06 * currentU;
-
-    // Combine checks: High Downward Vel OR Low Compactness
-    // AND Ensure spine is vertical (not Lying Flat)
-    const duckDetected = (compactnessRatio < 0.65 || duckVelocity > duckVelThresh)
-        && !isFlat && duckLockout === 0 && spineAngleDeg < 45;
-
-    if (duckDetected) {
-        duckCooldown = DUCK_COOLDOWN_FRAMES;
-        shoulderYHistory = [];
-    } else if (duckCooldown > 0) {
-        duckCooldown--;
-        if (duckCooldown === 0) jumpLockout = OPPOSITE_LOCKOUT_FRAMES;
-    }
-    if (duckLockout > 0) duckLockout--;
-    isDucking = duckCooldown > 0;
-
-
-    // --- Priority State Machine ---
-    if (isFlat) movementState = "FLAT";
-    else if (isJumping) movementState = "JUMP";
-    else if (isDucking) movementState = "DUCK";
-    else if (isRunning) movementState = "RUN";
-    else movementState = "IDLE";
-
-    // --- Debug Info ---
+    // Debug info
     debugInfo.movement = {
-        state: movementState,
         U: currentU.toFixed(3),
-        jumpVel: jumpVelocity.toFixed(3), jumpThresh: jumpThresh.toFixed(3),
-        duckVel: duckVelocity.toFixed(3), duckThresh: duckVelThresh.toFixed(3),
-        compRatio: compactnessRatio.toFixed(2),
-        spineAngle: Math.round(spineAngleDeg), boxRatio: boxRatio.toFixed(2),
-        diffAmp: diffAmp.toFixed(3), signs: signChanges,
-        antiJump: bothKneesUp, spineTilt: spineAngleDeg > 60,
-        jLock: jumpLockout, dLock: duckLockout,
-        rCD: runCooldown, jCD: jumpCooldown, dCD: duckCooldown, fCD: flatCooldown,
-        lKnee: (midHipY - leftKnee.y).toFixed(2), rKnee: (midHipY - rightKnee.y).toFixed(2)
+        state: movementState,
+        diffAmp: run.ankDiff.toFixed(3),
+        jumpVel: jump.jumpVel.toFixed(3),
+        jumpThresh: jump.jumpThresh.toFixed(3),
+        compRatio: duck.compRatio.toFixed(2),
+        duckVel: duck.duckVel.toFixed(3),
+        hipAnkDist: squat.hipAnkleDist !== null ? squat.hipAnkleDist.toFixed(3) : "N/A",
+        boxRatio: squat.boxRatio.toFixed(2),
+        jLock: jumpLockout,
+        dLock: duckLockout
     };
 }
+

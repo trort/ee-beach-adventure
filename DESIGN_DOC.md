@@ -23,10 +23,10 @@ To ensure the game works for a child at varying distances from the camera, all t
 
 * **Reference Unit (U):** The distance between `Nose` and `Mid-Hip`. Calculated continuously as a 30-frame running average to handle the child moving closer/further.
 * **Detection Triggers:**
-* **Running:** Triggered by **Hip-Relative Knee Lift**. If knees oscillate vertically relative to the hip, AND both knees are not lifted simultaneously (Anti-Jump Guard).
+* **Running:** Triggered by **Alternating Ankle Lift**. Uses ankle position relative to hip to detect high steps. Includes Anti-Jump Guard.
 * **Jumping:** Triggered if `Shoulder` -velocity exceeds `0.08 * U` (Rapid upward movement).
 * **Ducking:** Triggered if **Compactness Ratio** (`BodyHeight / U`) < 0.65 OR if `Nose` downward velocity is high. Valid only if spine is vertical.
-* **Lying Flat:** Triggered if **Spine Angle** > 60° (Horizontal) OR Bounding Box Width > 1.5 * Height. Priority state.
+* **Deep Squat:** Triggered if **Leg Compression** (`|Hip.y - Ankle.y| < 0.6 * U`). Used to dodge Rockets. Priority state.
 
 
 
@@ -43,7 +43,7 @@ To ensure the game works for a child at varying distances from the camera, all t
 
 * **Gameplay:**
 * **Duration:** 90-second fixed level.
-* **Obstacles:** Seashells (Jump), Seagulls (Duck), and Rockets (Lie Flat).
+* **Obstacles:** Seashells (Jump), Seagulls (Duck), and Rockets (Deep Squat).
 * **No Game Over:** If an obstacle is hit, play a "Stunned" animation (sparkles/dizzy) and let the player pass.
 * **Visual Cues:** Large Up/Down arrows appear 2 seconds before an obstacle hits.
 * **Goal:** Reach a large Sandcastle with a red flag.
@@ -63,7 +63,7 @@ To ensure the game works for a child at varying distances from the camera, all t
 
 ### Milestone 2: Gesture Engine (Logic Only)
 
-* Implement the normalized math for Run, Jump, Duck, and Lying Flat.
+* Implement the normalized math for Run, Jump, Duck, and Deep Squat.
 * Create an on-screen debug UI: three boxes that light up when the corresponding action is detected.
 * **Success Criteria:** Robust detection of all three movements at various distances from the camera. "Run" must not accidentally trigger "Jump."
 
@@ -71,7 +71,7 @@ To ensure the game works for a child at varying distances from the camera, all t
 
 * Integrate a 2D character sprite and a scrolling beach background.
 * Map "Running" detection to background scroll speed (Binary: run = move, stop = still).
-* Add character animations for Jump, Duck, and Lying Flat.
+* Add character animations for Jump, Duck, and Squat.
 * **Success Criteria:** The character responds fluidly to the physical movements.
 
 ### Milestone 4: Level Design & Audio
